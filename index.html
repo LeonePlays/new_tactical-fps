@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#151510" />
+  <title>TACTICAL FPS — Classic Combat</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23151510'/%3E%3Cpath d='M13 14h38v10H36v27H26V24H13z' fill='%23d9a95c'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main id="game-shell">
+    <canvas id="game-canvas"></canvas>
+    <div id="grain"></div>
+    <div id="menu-screen" class="screen visible">
+      <div class="menu-backdrop"></div>
+      <header class="brand"><div class="brand-mark">T</div><div><h1>TACTICAL<span>FPS</span></h1><p>CLASSIC COMBAT • EST. 2003</p></div></header>
+      <div class="menu-layout">
+        <nav class="main-menu">
+          <button data-panel="new">New Game <small>Start a local match</small></button>
+          <button data-panel="servers">Find Servers <small>Browse active games</small></button>
+          <button data-panel="create">Create Server <small>Host a match</small></button>
+          <button data-panel="options">Options <small>Configure controls</small></button>
+          <button data-panel="profile">Player Profile <small>Identity and team</small></button>
+          <button id="quit-button">Quit <small>Leave the battlefield</small></button>
+        </nav>
+        <section class="menu-card">
+          <div class="card-kicker">TACTICAL OPERATIONS // 01</div>
+          <h2>Dust &amp; iron.</h2>
+          <p>Two teams. One objective. No second chances.</p>
+          <div class="feature-image"><div class="sun"></div><div class="ridge ridge-back"></div><div class="ridge ridge-front"></div><div class="watchtower"><i></i></div><div class="dust-label">OPERATION: OLD QUARTER</div></div>
+          <div class="menu-foot"><span><b class="live-dot"></b> LOCAL PRACTICE READY</span><span>BUILD 1.03.16</span></div>
+        </section>
+      </div>
+      <footer class="menu-footer">© 2003–2026 TACTICAL FPS &nbsp; • &nbsp; ORIGINAL GAME CONTENT &nbsp; • &nbsp; ALL SYSTEMS NOMINAL</footer>
+    </div>
+    <div id="panel-screen" class="screen"></div>
+    <div id="hud" class="hidden">
+      <div class="top-strip"><div class="team-chip ct-chip"><i></i> CT <strong id="ct-score">0</strong></div><div class="round-info"><span id="round-mode">BOMB DEFUSAL</span><b id="round-clock">02:00</b><small id="round-state">ROUND 01 / 12</small></div><div class="team-chip t-chip"><strong id="t-score">0</strong> T <i></i></div></div>
+      <div class="radar"><div class="radar-grid"></div><span class="radar-n">N</span><div id="radar-dots"></div><b>RADAR</b></div>
+      <div class="kill-feed" id="kill-feed"></div>
+      <div class="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
+      <div class="objective-banner" id="objective-banner"></div>
+      <div class="bottom-hud"><div class="status-group"><div class="health-icon">✚</div><div><small>HEALTH</small><strong id="health-value">100</strong></div><div class="hud-divider"></div><div class="shield-icon">◈</div><div><small>ARMOR</small><strong id="armor-value">100</strong></div></div><div class="money-box"><small>CASH</small><strong id="money-value">$800</strong></div><div class="ammo-box"><div class="weapon-name"><small>PRIMARY WEAPON</small><strong id="weapon-name">CV-47</strong></div><div class="ammo-count"><strong id="ammo-value">30</strong><span> / <b id="reserve-value">90</b></span><small>AMMO</small></div></div></div>
+      <div class="hint-bar" id="hint-bar">WASD MOVE <b>•</b> MOUSE AIM <b>•</b> CLICK FIRE <b>•</b> R RELOAD <b>•</b> B BUY <b>•</b> TAB SCOREBOARD <b>•</b> ESC MENU</div>
+      <div id="scoreboard" class="scoreboard hidden"></div>
+      <div id="buy-panel" class="buy-panel hidden"></div>
+      <div id="pause-panel" class="pause-panel hidden"><h2>PAUSED</h2><p>LOCAL MATCH</p><button id="resume-button">RETURN TO GAME</button><button id="leave-button">ABANDON MATCH</button></div>
+      <div id="console-panel" class="console-panel hidden"><div>TACTICAL FPS CONSOLE — TYPE <b>help</b> FOR COMMANDS</div><input id="console-input" autocomplete="off" spellcheck="false" placeholder="say_team: hold the site..." /></div>
+      <div class="team-prompt hidden" id="team-prompt"></div>
+    </div>
+    <div id="toast" class="toast"></div>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
