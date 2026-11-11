@@ -1,6 +1,6 @@
 # Tactical FPS — Classic Combat
 
-A browser-based, offline-first tactical FPS prototype built with Three.js and Vite. It features an original low-poly urban arena, first-person weapon view, AI opponents, round-based combat, a classic-style HUD, and local player settings. It is inspired by the era and feel of classic tactical shooters; it does not include Counter-Strike assets or maps.
+A browser-based, offline-first tactical FPS prototype built with Three.js and Vite. It features two original low-poly arenas, a first-person weapon view, AI opponents, Team Deathmatch and Free For All modes, a classic-style HUD, and local player settings. It is inspired by the era and feel of classic tactical shooters; it does not include Counter-Strike assets or maps.
 
 ## Run locally
 
@@ -29,11 +29,11 @@ The player name and mouse sensitivity are stored locally in the browser.
 
 ## Current scope and limitations
 
-This is a playable prototype, not a complete or balanced competitive game. The implemented arena is **Old Quarter**; map names in setup are not yet backed by separate map layouts. Game modes currently share much of the same round and bot logic, and bomb/hostage objectives are not fully implemented. Bot navigation and combat are intentionally simple.
+This is a playable prototype, not a complete or balanced competitive game. The implemented maps are **Old Quarter** and **Industrial Complex**. The available modes are Team Deathmatch and Free For All; bomb and hostage objectives are not implemented. Bot navigation and combat are intentionally simple, and the modes are not tuned for competitive balance.
 
-**Online multiplayer is not currently available.** The server browser and public-host controls expect a separate lobby service on port `3001`, but this repository does not include that service. The `npm run server` script therefore cannot run yet. Matches started through the offline controls run locally against bots; joining players, server discovery, and authoritative networked combat are not implemented.
+**Online multiplayer is not available.** The server browser does not show simulated servers or fake players, and this repository does not include a matchmaking or game-server backend. Matches started from the offline controls run locally against bots. Player joining, server discovery, and networked combat are not implemented. The `npm run server` package script references a `server.js` file that is not included in this project.
 
-Some options are presentation-only or incomplete, including display mode, graphics quality, and the volume slider. The production build currently emits a Vite warning that the bundled JavaScript exceeds 500 kB.
+The production build succeeds and splits Three.js into its own JavaScript chunk. Performance depends on the user's browser and graphics hardware; the settings include quality, shadow, and render-scale controls.
 
 ## Technology
 
