@@ -3,53 +3,161 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#151510" />
+  <meta name="theme-color" content="#14150f" />
+  <meta name="description" content="Tactical FPS — an original offline browser first-person shooter built with Three.js." />
   <title>TACTICAL FPS — Classic Combat</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23151510'/%3E%3Cpath d='M13 14h38v10H36v27H26V24H13z' fill='%23d9a95c'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23141510'/%3E%3Cpath d='M13 13h38v9H36v29H25V22H13z' fill='%23d9a95c'/%3E%3Cpath d='M13 51h20v5H13z' fill='%238c8a78'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <main id="game-shell">
-    <canvas id="game-canvas"></canvas>
-    <div id="grain"></div>
+    <canvas id="game-canvas" aria-label="First-person game view"></canvas>
+    <div id="grain" aria-hidden="true"></div>
+
     <div id="menu-screen" class="screen visible">
       <div class="menu-backdrop"></div>
-      <header class="brand"><div class="brand-mark">T</div><div><h1>TACTICAL<span>FPS</span></h1><p>CLASSIC COMBAT • EST. 2003</p></div></header>
+      <header class="brand">
+        <div class="brand-mark">T</div>
+        <div>
+          <h1>TACTICAL<span>FPS</span></h1>
+          <p>CLASSIC COMBAT &bull; OFFLINE OPERATIONS</p>
+        </div>
+      </header>
+
       <div class="menu-layout">
-        <nav class="main-menu">
-          <button data-panel="new">New Game <small>Start a local match</small></button>
-          <button data-panel="servers">Find Servers <small>Browse active games</small></button>
-          <button data-panel="create">Create Server <small>Host a match</small></button>
-          <button data-panel="options">Options <small>Configure controls</small></button>
-          <button data-panel="profile">Player Profile <small>Identity and team</small></button>
-          <button id="quit-button">Quit <small>Leave the battlefield</small></button>
+        <nav class="main-menu" aria-label="Main menu">
+          <button class="primary" data-action="play">
+            <span>PLAY</span><small>Quick deploy &mdash; Old Quarter, TDM</small>
+          </button>
+          <button data-action="setup">
+            <span>PLAY OFFLINE</span><small>Configure map, mode and bots</small>
+          </button>
+          <button data-action="servers">
+            <span>FIND SERVERS</span><small>Online status &amp; information</small>
+          </button>
+          <button data-action="settings"><span>SETTINGS</span><small>Video, audio, controls</small></button>
+          <button data-action="profile"><span>PLAYER PROFILE</span><small>Identity and career record</small></button>
+          <button data-action="credits"><span>CREDITS</span><small>About this build</small></button>
         </nav>
+
         <section class="menu-card">
           <div class="card-kicker">TACTICAL OPERATIONS // 01</div>
           <h2>Dust &amp; iron.</h2>
-          <p>Two teams. One objective. No second chances.</p>
-          <div class="feature-image"><div class="sun"></div><div class="ridge ridge-back"></div><div class="ridge ridge-front"></div><div class="watchtower"><i></i></div><div class="dust-label">OPERATION: OLD QUARTER</div></div>
-          <div class="menu-foot"><span><b class="live-dot"></b> LOCAL PRACTICE READY</span><span>BUILD 1.03.16</span></div>
+          <p>Two teams. Tight lanes. No second chances.</p>
+          <div class="feature-image" aria-hidden="true">
+            <div class="sun"></div>
+            <div class="ridge ridge-back"></div>
+            <div class="ridge ridge-front"></div>
+            <div class="watchtower"><i></i></div>
+            <div class="dust-label">OPERATION: OLD QUARTER</div>
+          </div>
+          <div class="menu-foot">
+            <span><b class="live-dot"></b> OFFLINE READY</span>
+            <span>BUILD 2.0.0</span>
+          </div>
         </section>
       </div>
-      <footer class="menu-footer">© 2003–2026 TACTICAL FPS &nbsp; • &nbsp; ORIGINAL GAME CONTENT &nbsp; • &nbsp; ALL SYSTEMS NOMINAL</footer>
+
+      <footer class="menu-footer">
+        <span>TACTICAL FPS &copy; 2026 &nbsp;&bull;&nbsp; ORIGINAL GAME CONTENT</span>
+        <span>WASD MOVE &nbsp;&bull;&nbsp; MOUSE AIM &nbsp;&bull;&nbsp; ESC PAUSE</span>
+      </footer>
     </div>
-    <div id="panel-screen" class="screen"></div>
-    <div id="hud" class="hidden">
-      <div class="top-strip"><div class="team-chip ct-chip"><i></i> CT <strong id="ct-score">0</strong></div><div class="round-info"><span id="round-mode">BOMB DEFUSAL</span><b id="round-clock">02:00</b><small id="round-state">ROUND 01 / 12</small></div><div class="team-chip t-chip"><strong id="t-score">0</strong> T <i></i></div></div>
-      <div class="radar"><div class="radar-grid"></div><span class="radar-n">N</span><div id="radar-dots"></div><b>RADAR</b></div>
+
+    <div id="panel-screen" class="screen" aria-live="polite"></div>
+
+    <div id="hud" class="hidden" aria-live="off">
+      <div class="top-strip">
+        <div class="team-chip ct-chip"><i></i><span id="left-team-label">CT</span><strong id="ct-score">0</strong></div>
+        <div class="round-info">
+          <span id="round-mode">TEAM DEATHMATCH</span>
+          <b id="round-clock">03:00</b>
+          <small id="round-state">LIVE</small>
+        </div>
+        <div class="team-chip t-chip"><strong id="t-score">0</strong><span id="right-team-label">T</span><i></i></div>
+      </div>
+
+      <div class="radar-wrap">
+        <canvas id="radar" width="200" height="200"></canvas>
+        <b>RADAR</b>
+      </div>
+
       <div class="kill-feed" id="kill-feed"></div>
-      <div class="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
       <div class="objective-banner" id="objective-banner"></div>
-      <div class="bottom-hud"><div class="status-group"><div class="health-icon">✚</div><div><small>HEALTH</small><strong id="health-value">100</strong></div><div class="hud-divider"></div><div class="shield-icon">◈</div><div><small>ARMOR</small><strong id="armor-value">100</strong></div></div><div class="money-box"><small>CASH</small><strong id="money-value">$800</strong></div><div class="ammo-box"><div class="weapon-name"><small>PRIMARY WEAPON</small><strong id="weapon-name">CV-47</strong></div><div class="ammo-count"><strong id="ammo-value">30</strong><span> / <b id="reserve-value">90</b></span><small>AMMO</small></div></div></div>
-      <div class="hint-bar" id="hint-bar">WASD MOVE <b>•</b> MOUSE AIM <b>•</b> CLICK FIRE <b>•</b> R RELOAD <b>•</b> B BUY <b>•</b> TAB SCOREBOARD <b>•</b> ESC MENU</div>
+
+      <div class="crosshair" id="crosshair">
+        <i class="ch-top"></i><i class="ch-bottom"></i><i class="ch-left"></i><i class="ch-right"></i>
+        <b></b>
+        <div class="hitmarker" id="hitmarker"></div>
+      </div>
+
+      <div class="damage-vignette" id="damage-vignette"></div>
+      <div class="damage-direction" id="damage-direction"></div>
+
+      <div class="bottom-hud">
+        <div class="status-group">
+          <div class="health-icon">&#10010;</div>
+          <div><small>HEALTH</small><strong id="health-value">100</strong></div>
+          <div class="hud-divider"></div>
+          <div class="shield-icon">&#9672;</div>
+          <div><small>ARMOR</small><strong id="armor-value">100</strong></div>
+        </div>
+        <div class="match-status">
+          <small id="match-mode-label">TEAM DEATHMATCH</small>
+          <strong id="match-score-label">0 &ndash; 0</strong>
+        </div>
+        <div class="ammo-box">
+          <div class="weapon-name"><small>EQUIPMENT</small><strong id="weapon-name">AR-4 RIFLE</strong></div>
+          <div class="ammo-count"><strong id="ammo-value">30</strong><span> / <b id="reserve-value">120</b></span><small>AMMO</small></div>
+        </div>
+      </div>
+
+      <div class="hint-bar" id="hint-bar">
+        WASD MOVE <b>&bull;</b> MOUSE AIM <b>&bull;</b> CLICK FIRE <b>&bull;</b> R RELOAD <b>&bull;</b> 1/2 SWITCH <b>&bull;</b> TAB SCORES <b>&bull;</b> ESC PAUSE
+      </div>
+
+      <div id="fps-counter" class="fps-counter hidden">FPS 0</div>
+
       <div id="scoreboard" class="scoreboard hidden"></div>
-      <div id="buy-panel" class="buy-panel hidden"></div>
-      <div id="pause-panel" class="pause-panel hidden"><h2>PAUSED</h2><p>LOCAL MATCH</p><button id="resume-button">RETURN TO GAME</button><button id="leave-button">ABANDON MATCH</button></div>
-      <div id="console-panel" class="console-panel hidden"><div>TACTICAL FPS CONSOLE — TYPE <b>help</b> FOR COMMANDS</div><input id="console-input" autocomplete="off" spellcheck="false" placeholder="say_team: hold the site..." /></div>
-      <div class="team-prompt hidden" id="team-prompt"></div>
+
+      <div id="pause-panel" class="modal-panel hidden">
+        <div class="modal-frame pause-frame">
+          <div class="modal-kicker">MATCH PAUSED</div>
+          <h2>STANDBY</h2>
+          <p id="pause-subtitle">OLD QUARTER &bull; TEAM DEATHMATCH</p>
+          <button data-action="resume">RETURN TO GAME</button>
+          <button data-action="restart">RESTART MATCH</button>
+          <button data-action="pause-settings">SETTINGS</button>
+          <button data-action="quit" class="danger">ABANDON MATCH</button>
+        </div>
+      </div>
+
+      <div id="results-panel" class="modal-panel hidden">
+        <div class="modal-frame results-frame" id="results-content"></div>
+      </div>
+
+      <div id="respawn-panel" class="respawn-panel hidden">
+        <div class="kicker">YOU WERE ELIMINATED</div>
+        <h2 id="respawn-killer">RESPAWNING</h2>
+        <div class="respawn-count" id="respawn-count">4</div>
+        <p>KEEP YOUR SQUAD IN THE FIGHT</p>
+      </div>
+
+      <div id="pointer-prompt" class="pointer-prompt hidden">
+        <div class="mouse-icon"></div>
+        <strong>CLICK TO CAPTURE MOUSE</strong>
+        <span>WASD to move &bull; Mouse to aim &bull; Esc to release</span>
+      </div>
+
+      <div id="match-intro" class="match-intro hidden">
+        <div class="kicker">OPERATION START</div>
+        <h2 id="intro-map">OLD QUARTER</h2>
+        <p id="intro-mode">TEAM DEATHMATCH</p>
+      </div>
     </div>
-    <div id="toast" class="toast"></div>
+
+    <div id="toast" class="toast" role="status"></div>
+    <div id="boot-error" class="boot-error hidden"></div>
   </main>
   <script type="module" src="/src/main.js"></script>
 </body>

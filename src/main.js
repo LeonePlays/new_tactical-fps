@@ -1,176 +1,37 @@
-import * as THREE from 'three';
+import { Game } from './game/game.js';
+import { audio } from './audio/audio.js';
 
-const $ = (s) => document.querySelector(s);
-const canvas = $('#game-canvas');
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x9b9277);
-scene.fog = new THREE.Fog(0x9b9277, 42, 115);
-const camera = new THREE.PerspectiveCamera(74, innerWidth / innerHeight, .08, 180);
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.65));
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
-scene.add(new THREE.HemisphereLight(0xd8d0b1, 0x454239, 2.0));
-const sun = new THREE.DirectionalLight(0xffe1ae, 3.2); sun.position.set(-18, 30, 8); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); sun.shadow.camera.left = -48; sun.shadow.camera.right = 48; sun.shadow.camera.top = 48; sun.shadow.camera.bottom = -48; scene.add(sun);
+const canvas = document.querySelector('#game-canvas');
+const bootError = document.querySelector('#boot-error');
 
-let lastWorld=[];
-const game = { active:false, paused:false, team:'CT', mode:'Bomb Defusal', map:'Old Quarter', round:1, ct:0, t:0, time:120, health:100, armor:100, money:800, ammo:30, reserve:90, weapon:'CV-47', kills:0, lastShot:0, reload:0, bots:[], obstacles:[], keys:{}, yaw:0, pitch:0, velocity:new THREE.Vector3(), mouseLocked:false, online:null, difficulty:'Normal', maxPlayers:10, buyOpen:false, messageTimer:0, roundEnd:0, playerName:localStorage.playerName||'Operator', sound:true };
-camera.position.set(0, 1.72, 10); scene.add(camera);
-const mats = {};
-function mat(name,color,roughness=1){return mats[name] ||= new THREE.MeshStandardMaterial({color,roughness});}
-function textureMaterial(base, fleck, scale=1){
-  const c=document.createElement('canvas'); c.width=c.height=256; const x=c.getContext('2d'); x.fillStyle=base; x.fillRect(0,0,256,256);
-  let seed=13; const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
-  for(let i=0;i<2200;i++){const a=.035+rand()*.23;x.fillStyle=`rgba(${fleck},${a})`;const w=1+rand()*9;x.fillRect(rand()*256,rand()*256,w,w*.6)}
-  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(scale,scale);t.colorSpace=THREE.SRGBColorSpace;return new THREE.MeshStandardMaterial({map:t,color:0xffffff,roughness:1});
+function fail(error) {
+  console.error(error);
+  if (bootError) {
+    bootError.classList.remove('hidden');
+    bootError.innerHTML = `<strong>THE GAME COULD NOT START</strong><span>${String(error?.message || error)}</span><small>Try a current desktop browser with WebGL2 enabled.</small>`;
+  }
 }
-const plaster=textureMaterial('#a99876','45,36,23',2.4), sand=textureMaterial('#9b855e','37,32,22',4), brick=textureMaterial('#825d48','30,19,12',2), concrete=textureMaterial('#77776d','20,22,18',2.8), wood=textureMaterial('#684e34','26,17,9',1.8), metal=mat('metal',0x44463f,.65), dark=mat('dark',0x292c28), cloth=mat('cloth',0x46483e), skin=mat('skin',0xb18a6b), glass= new THREE.MeshStandardMaterial({color:0x566967,roughness:.3,metalness:.2});
-const boxGeo=new THREE.BoxGeometry(1,1,1);
-function addBox(x,y,z,w,h,d,material,collide=true){const m=new THREE.Mesh(boxGeo,material);m.position.set(x,y,z);m.scale.set(w,h,d);m.castShadow=true;m.receiveShadow=true;scene.add(m);if(collide)game.obstacles.push({x,z,w,d,y,h});return m;}
-function addCylinder(x,y,z,r,h,material,segments=8){const m=new THREE.Mesh(new THREE.CylinderGeometry(r*.88,r,h,segments),material);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;}
-function addArch(x,z,rot=0){const group=new THREE.Group();const stone=mat('archstone',0x9a8b6b);for(const sx of [-1,1]){const p=new THREE.Mesh(new THREE.BoxGeometry(.52,3.8,.85),stone);p.position.set(sx*1.8,1.9,0);group.add(p);const cap=new THREE.Mesh(new THREE.BoxGeometry(.7,.3,1),mat('cap',0xb29b72));cap.position.set(sx*1.8,3.85,0);group.add(cap)}const curve=new THREE.Mesh(new THREE.TorusGeometry(1.8,.28,5,12,Math.PI),stone);curve.position.y=3.8;curve.rotation.z=Math.PI;group.add(curve);group.position.set(x,0,z);group.rotation.y=rot;scene.add(group);return group;}
-function resetWorld(){for(const o of lastWorld)scene.remove(o);lastWorld=[];game.obstacles=[];game.bots.forEach(b=>scene.remove(b.group));game.bots=[];}
-function buildMap(){
- resetWorld();const worldStart=scene.children.length;
- const floor=new THREE.Mesh(new THREE.PlaneGeometry(108,108),sand);floor.rotation.x=-Math.PI/2;floor.position.y=-.12;floor.receiveShadow=true;floor.userData.worldObject=true;scene.add(floor);
- // central courtyard and connected lanes; architecture uses layered plaster, masonry, windows and trim
- const wall=(x,z,w,h,d,m=plaster)=>addBox(x,h/2,z,w,h,d,m);
- wall(0,-29,66,8,2,brick);wall(-33,0,2,8,60,plaster);wall(33,0,2,8,60,plaster);wall(0,29,66,8,2,plaster);
- // low parapets frame playable routes
- wall(-18,-18,25,4,1.6,plaster);wall(18,-18,25,4,1.6,plaster);wall(-18,18,25,4,1.6,brick);wall(18,18,25,4,1.6,plaster);
- wall(-28,0,1.3,4,20,brick);wall(28,0,1.3,4,20,plaster);
- // architectural blocks, all with separate lintels, recesses, sills and rooflines
- for(const [x,z,w,d,m] of [[-25,-24,14,9,plaster],[25,-24,14,9,brick],[-25,24,14,9,brick],[25,24,14,9,plaster],[-29,-2,7,9,plaster],[29,2,7,9,brick]]){
-  const h=7.5;addBox(x,h/2,z,w,h,d,m);addBox(x,h+.22,z,w+.45,.45,d+.45,concrete,false);
-  for(let side of [-1,1]){const wx=x+side*w*.27;addBox(wx,4,z-d/2-.025,1.5,2.4,.08,dark,false);addBox(wx,2.72,z-d/2-.10,2,.18,.28,concrete,false);addBox(wx,5.3,z-d/2-.1,2.1,.2,.3,brick,false);}
-  addBox(x,1.45,z+d/2+.03,w*.35,2.9,.12,wood,false);addBox(x,3.05,z+d/2+.12,w*.42,.18,.24,concrete,false);
- }
- // arcaded central passage and side entrances
- addArch(-9,0,Math.PI/2);addArch(9,0,-Math.PI/2);addArch(0,-11,0);addArch(0,11,Math.PI);
- // a two-level market lane, ledges and stair flights
- for(let i=0;i<6;i++){addBox(-15+i*.55,.18+i*.25,-7,.72,.36+i*.5,2.5,concrete);}
- addBox(-14,2.4,-5.7,7,.35,.32,brick,false);addBox(-14,2.8,-5.7,7,.18,.42,concrete,false);
- // textured barriers, casks, sandbags and crates as environmental props
- for(const [x,z] of [[-5,-4],[5,4],[-23,8],[22,-8],[13,13],[-13,-13]]){
-   const crate=addBox(x,.72,z,1.75,1.35,1.45,wood);for(let y of [.25,1.2])addBox(x,.72+y,z-.74,1.8,.09,.08,mat('crateband',0x927348),false);addBox(x,.72,z,1.8,.08,1.5,wood,false);
- }
- for(const [x,z] of [[-2,7],[2,7],[20,-2],[-20,2]]){for(let i=0;i<3;i++){const s=addCylinder(x+(i%2)*.45,.24+i*.32,z+Math.floor(i/2)*.34,.42,.55,mat('bag',0x8c8063),7);s.rotation.z=.12;}}
- for(const [x,z] of [[-30,-13],[30,14]]){const barrel=addCylinder(x,.7,z,.48,1.4,metal,12);addCylinder(x,1.42,z,.49,.08,mat('rim',0x77786e),12);}
- // overhead cables and lanterns
- for(let i=-1;i<=1;i++){const cable=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,23,5),dark);cable.position.set(i*8,6,0);cable.rotation.z=Math.PI/2;scene.add(cable);}
- for(const [x,z] of [[-8,-20],[8,20],[0,-27]]){addBox(x,5,z,.15,1.2,.15,dark,false);const lamp=new THREE.Mesh(new THREE.OctahedronGeometry(.28,0),mat('lamp',0xd6b773));lamp.position.set(x,4.35,z);scene.add(lamp);}
- // objective sites
- const siteMat=new THREE.MeshStandardMaterial({color:0xc2a160,roughness:.8,transparent:true,opacity:.35,emissive:0x30200b});
- for(const [x,z,label] of [[20,0,'A'],[-20,0,'B']]){const ring=new THREE.Mesh(new THREE.CylinderGeometry(3.2,3.2,.035,24),siteMat);ring.position.set(x,.03,z);scene.add(ring);const letter=new THREE.Mesh(new THREE.BoxGeometry(1.7,.06,.12),mat('siteletter',0xdfc48a));letter.position.set(x,.07,z);scene.add(letter);}
- // rubble, scrub, and terrain silhouettes outside the perimeter
- for(let i=0;i<40;i++){const x=(Math.random()-.5)*95,z=(Math.random()-.5)*95;if(Math.abs(x)<34&&Math.abs(z)<30)continue;const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(.4+Math.random()*.8,0),i%2?concrete:brick);rock.position.set(x,.25,z);rock.scale.y=.5;rock.rotation.set(Math.random(),Math.random(),Math.random());scene.add(rock)}
- scene.background=new THREE.Color(0xb9a77e);scene.fog.color.set(0xb9a77e);lastWorld=scene.children.slice(worldStart);
+
+try {
+  if (!canvas) throw new Error('Game canvas was not found.');
+  const game = new Game(canvas);
+  window.game = game;
+
+  // Unlock procedural audio as soon as the player interacts with the page.
+  const unlock = () => {
+    audio.init();
+    audio.startMusic();
+    audio.setVolumes();
+  };
+  window.addEventListener('pointerdown', unlock, { once: true });
+  window.addEventListener('keydown', unlock, { once: true });
+
+  window.addEventListener('error', (event) => {
+    if (event.error) console.error('Runtime error:', event.error);
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('Unhandled rejection:', event.reason);
+  });
+} catch (error) {
+  fail(error);
 }
-buildMap();
-
-// A recognizable, articulated low-poly combatant silhouette with head, torso, gear and moving limbs.
-const names=['Viper','Sasha','Maverick','Ghost','Rook','Kestrel','Bishop','Wraith','Nomad','Hawk','Sable','Ranger','Fox','Mako'];
-function makeSoldier(team,name){const g=new THREE.Group();const uniform=team==='CT'?mat('ctcloth',0x46534d):mat('tcloth',0x786447);const vest=team==='CT'?mat('ctvest',0x303a37):mat('tvest',0x564633);const boots=mat('boots',0x292924);
- const limb=(r1,r2,len,material)=>new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,len,7),material);
- const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.37,.72,3,7),uniform);torso.position.y=1.42;torso.castShadow=true;g.add(torso);
- const vestMesh=new THREE.Mesh(new THREE.CapsuleGeometry(.39,.55,3,7),vest);vestMesh.position.set(0,1.47,-.025);vestMesh.scale.set(1,.93,.8);g.add(vestMesh);
- const head=new THREE.Mesh(new THREE.SphereGeometry(.24,8,6),skin);head.position.y=2.15;head.scale.set(.86,1.08,.88);head.castShadow=true;g.add(head);
- const helmet=new THREE.Mesh(new THREE.SphereGeometry(.27,8,5,0,Math.PI*2,0,Math.PI*.56),team==='CT'?mat('helmetct',0x394741):mat('helmett',0x5d503b));helmet.position.y=2.21;g.add(helmet);
- const belt=new THREE.Mesh(new THREE.CylinderGeometry(.34,.36,.15,8),dark);belt.position.y=1.02;g.add(belt);
- const legs=[];for(const side of [-1,1]){const thigh=limb(.17,.21,.6,uniform);thigh.position.set(side*.19,.68,0);thigh.rotation.z=side*-.04;g.add(thigh);const boot=new THREE.Mesh(new THREE.CapsuleGeometry(.14,.36,2,6),boots);boot.position.set(side*.19,.22,-.04);boot.rotation.x=Math.PI/2;g.add(boot);legs.push(thigh);
- const arm=limb(.12,.16,.68,uniform);arm.position.set(side*.42,1.47,-.1);arm.rotation.z=side*.38;g.add(arm);const glove=new THREE.Mesh(new THREE.SphereGeometry(.13,6,5),dark);glove.position.set(side*.52,1.12,-.14);g.add(glove);}
- for(let i=0;i<3;i++){const pouch=new THREE.Mesh(new THREE.BoxGeometry(.18,.22,.11),vest);pouch.position.set((i-1)*.23,1.27,-.32);g.add(pouch)}
- const rifle=new THREE.Group();const barrel=new THREE.Mesh(new THREE.CylinderGeometry(.035,.045,.85,7),metal);barrel.rotation.x=Math.PI/2;barrel.position.set(0,1.42,-.57);rifle.add(barrel);const body=new THREE.Mesh(new THREE.BoxGeometry(.18,.2,.56),dark);body.position.set(0,1.4,-.23);rifle.add(body);g.add(rifle);
- g.userData={team,name,legs,rifle,health:100,alive:true,think:Math.random(),phase:Math.random()*6,waypoint:Math.floor(Math.random()*8),fire:Math.random()};return g;}
-const nav=[new THREE.Vector3(-22,0,-12),new THREE.Vector3(-8,0,-18),new THREE.Vector3(8,0,-18),new THREE.Vector3(22,0,-12),new THREE.Vector3(23,0,10),new THREE.Vector3(8,0,18),new THREE.Vector3(-8,0,18),new THREE.Vector3(-22,0,10),new THREE.Vector3(0,0,0)];
-function spawnBots(count=8){game.bots.forEach(b=>scene.remove(b.group));game.bots=[];game.botCount=Math.max(0,count);for(let i=0;i<game.botCount;i++){const team=i%2===0?'T':'CT',g=makeSoldier(team,names[i%names.length]);g.position.set((Math.random()*7-3.5)+(team==='T'?-22:22),0,(Math.random()*13-6));g.rotation.y=team==='T'?Math.PI:0;scene.add(g);game.bots.push({group:g,team,name:g.userData.name,health:100,alive:true,respawn:0,shootCD:Math.random()*1,goal:Math.floor(Math.random()*nav.length),state:'patrol'});}}
-
-// First-person hands and sculpted rifle: receiver, stock, sights, barrel, magazine, grip and wood furniture.
-const gun=new THREE.Group();camera.add(gun);gun.position.set(.35,-.34,-.67);gun.rotation.set(-.04,-.08,-.03);
-function gunBox(x,y,z,w,h,d,m){const a=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);a.position.set(x,y,z);a.castShadow=true;gun.add(a);return a;}
-const gunMetal=mat('gunmetal',0x353934,.48), gunSteel=mat('gunsteel',0x66675e,.35), gunWood=mat('gunwood',0x624a32,.8), gloveMat=mat('glove',0x383c35);
-gunBox(0,0,0,.13,.14,.53,gunMetal);gunBox(0,.012,-.24,.15,.11,.21,gunSteel);gunBox(0,-.12,.06,.12,.29,.12,gunMetal);gunBox(0,-.23,-.04,.105,.23,.09,gunWood);gunBox(0,.015,.25,.17,.13,.28,gunWood);
-const barrelMesh=new THREE.Mesh(new THREE.CylinderGeometry(.032,.04,.5,9),gunSteel);barrelMesh.rotation.x=Math.PI/2;barrelMesh.position.set(0,.025,-.46);gun.add(barrelMesh);
-const sight=new THREE.Mesh(new THREE.TorusGeometry(.045,.009,5,10),gunSteel);sight.position.set(0,.095,-.23);gun.add(sight);gunBox(0,.1,-.23,.035,.075,.035,gunSteel);gunBox(0,.095,-.48,.06,.035,.06,gunMetal);
-for(let i=0;i<5;i++)gunBox(0,-.012,-.39-i*.025,.145,.013,.012,gunMetal);
-// Sleeved forearm and glove, matching the first-person weapon grip.
-const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.085,.38,3,7),cloth);arm.position.set(.14,-.27,.13);arm.rotation.x=-.5;arm.rotation.z=-.42;gun.add(arm);
-const hand=new THREE.Mesh(new THREE.SphereGeometry(.09,7,6),gloveMat);hand.position.set(.035,-.065,-.14);gun.add(hand);
-
-function toast(text){const el=$('#toast');el.textContent=text;el.classList.add('show');clearTimeout(game.messageTimer);game.messageTimer=setTimeout(()=>el.classList.remove('show'),2100)}
-function showPanel(title,content){const p=$('#panel-screen');p.innerHTML=`<div class="panel"><button class="close" data-close>BACK</button><h2>${title}</h2><p class="sub">TACTICAL FPS // CLASSIC SERVER BROWSER</p>${content}</div>`;p.classList.add('visible');p.querySelector('[data-close]').onclick=()=>p.classList.remove('visible');}
-function startGame(options={}){
- game.map=options.map||'Old Quarter';game.mode=options.mode||'Bomb Defusal';game.difficulty=options.difficulty||'Normal';game.maxPlayers=+(options.maxPlayers||10);game.team=options.team||'CT';game.money=+(options.money??800);game.round=1;game.ct=0;game.t=0;game.time=+(options.roundTime??120);game.health=100;game.armor=100;game.ammo=30;game.reserve=90;game.kills=0;game.active=true;game.paused=false;game.roundEnd=0;
- $('#menu-screen').classList.remove('visible');$('#panel-screen').classList.remove('visible');$('#hud').classList.remove('hidden');buildMap();spawnBots(Math.min(10,Math.max(0,(options.bots??8))));camera.position.set(game.team==='CT'?22:-22,1.72,0);game.yaw=game.team==='CT'?Math.PI/2:-Math.PI/2;camera.rotation.set(0,game.yaw,0,'YXZ');$('#round-mode').textContent=game.mode.toUpperCase();updateHUD();
- $('#team-prompt').classList.add('hidden');toast(`${game.map.toUpperCase()} — OPERATION STARTED`);canvas.requestPointerLock?.();}
-function updateHUD(){ $('#health-value').textContent=game.health;$('#armor-value').textContent=game.armor;$('#money-value').textContent='$'+game.money.toLocaleString();$('#ammo-value').textContent=game.ammo;$('#reserve-value').textContent=game.reserve;$('#weapon-name').textContent=game.weapon;$('#ct-score').textContent=game.ct;$('#t-score').textContent=game.t;$('#round-state').textContent=`ROUND ${String(game.round).padStart(2,'0')} / 12`;$('#round-clock').textContent=`${String(Math.floor(game.time/60)).padStart(2,'0')}:${String(Math.max(0,Math.floor(game.time%60))).padStart(2,'0')}`;}
-function openCreate(){showPanel('CREATE SERVER',`<div class="form-grid"><label class="field">SERVER NAME<input id="server-name" value="Old Quarter Classic"></label><label class="field">MAP<select id="map-select"><option>Old Quarter</option><option>Dustworks</option><option>Foundry</option><option>Harbor District</option></select></label><label class="field">GAME MODE<select id="mode-select"><option>Bomb Defusal</option><option>Hostage Rescue</option><option>Team Deathmatch</option><option>Free For All</option><option>Practice</option></select></label><label class="field">MAX PLAYERS<select id="max-players"><option>10</option><option>16</option><option>24</option><option>32</option></select></label><label class="field">BOTS<select id="bot-count"><option>8</option><option>4</option><option>6</option><option>10</option><option>0</option></select></label><label class="field">BOT SKILL<select id="bot-skill"><option>Normal</option><option>Easy</option><option>Hard</option><option>Expert</option></select></label><label class="field">ROUND TIME<select id="round-time"><option value="120">2:00 minutes</option><option value="180">3:00 minutes</option><option value="90">1:30 minutes</option></select></label><label class="field">STARTING CASH<select id="start-cash"><option value="800">$800</option><option value="16000">$16,000</option><option value="0">$0</option></select></label><label class="field full">VISIBILITY<select id="server-visibility"><option>Private LAN match</option><option>Public (available on this network)</option></select></label></div><div class="panel-actions"><button data-close>Cancel</button><button id="launch-match">START GAME</button></div>`);
- $('#launch-match').onclick=()=>{const opts={map:$('#map-select').value,mode:$('#mode-select').value,bots:+$('#bot-count').value,difficulty:$('#bot-skill').value,maxPlayers:$('#max-players').value,roundTime:$('#round-time').value,money:$('#start-cash').value};$('#panel-screen').classList.remove('visible');startGame(opts);if($('#server-visibility').value.startsWith('Public'))hostLobby($('#server-name').value,opts);};}
-function openServers(){showPanel('FIND SERVERS',`<div class="panel-actions" style="justify-content:space-between;margin:0"><span class="sub" style="margin:7px 0">LOCAL NETWORK + COMMUNITY SERVERS</span><button id="refresh-servers">REFRESH</button></div><table class="server-table"><thead><tr><th>SERVER</th><th>MAP</th><th>PLAYERS</th><th>PING</th><th></th></tr></thead><tbody id="server-rows"><tr><td colspan="5">Searching local network…</td></tr></tbody></table><p class="profile-note">Only live servers that have opened a connection to this game's lobby service appear here. Create a public server to host on your network.</p>`);refreshServers();$('#refresh-servers').onclick=refreshServers;}
-async function refreshServers(){const tbody=$('#server-rows');if(!tbody)return;try{const r=await fetch('/api/servers');if(!r.ok)throw 0;const data=await r.json();if(!data.length){tbody.innerHTML='<tr><td colspan="5">No active servers found. Host a public match or practice offline.</td></tr>';return;}tbody.innerHTML=data.map((s,i)=>`<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.map)}</td><td>${s.players}/${s.maxPlayers}</td><td>${s.ping||1} ms</td><td><button data-join="${i}">JOIN</button></td></tr>`).join('');tbody.querySelectorAll('[data-join]').forEach(b=>b.onclick=()=>{const s=data[+b.dataset.join];$('#panel-screen').classList.remove('visible');joinLobby(s);});}catch{tbody.innerHTML='<tr><td colspan="5">Lobby service offline. Local Practice is always available.</td></tr>';}}
-function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function openOptions(){showPanel('OPTIONS',`<div class="form-grid"><label class="field full">PLAYER NAME<input id="options-name" value="${escapeHtml(game.playerName)}" maxlength="18"></label><label class="field">MOUSE SENSITIVITY<input id="sensitivity" type="range" min=".3" max="2.5" step=".1" value="1"></label><label class="field">MASTER VOLUME<input id="volume" type="range" min="0" max="100" value="65"></label><label class="field">DISPLAY MODE<select><option>Fullscreen</option><option>Windowed</option></select></label><label class="field">GRAPHICS QUALITY<select><option>Classic</option><option>Performance</option></select></label><label class="field full"><span><input id="sound-toggle" type="checkbox" checked> ENABLE GAME AUDIO</span></label></div><div class="panel-actions"><button id="save-options">APPLY SETTINGS</button></div>`);$('#save-options').onclick=()=>{game.playerName=$('#options-name').value.trim()||'Operator';localStorage.playerName=game.playerName;localStorage.sensitivity=$('#sensitivity').value;game.sound=$('#sound-toggle').checked;toast('OPTIONS SAVED');$('#panel-screen').classList.remove('visible');};}
-function openProfile(){showPanel('PLAYER PROFILE',`<div class="form-grid"><label class="field full">CALLSIGN<input id="profile-name" maxlength="18" value="${escapeHtml(game.playerName)}"></label><label class="field">PREFERRED TEAM<select id="profile-team"><option>Counter-Terrorists</option><option>Terrorists</option></select></label><label class="field">RANK<div style="padding:9px;color:#d4bd7f">FIELD OPERATIVE <span style="color:#89836e">• LOCAL</span></div></label></div><p class="profile-note">Your callsign and settings are stored on this device. Choose a team when the match begins.</p><div class="panel-actions"><button id="save-profile">SAVE PROFILE</button></div>`);$('#save-profile').onclick=()=>{game.playerName=$('#profile-name').value.trim()||'Operator';localStorage.playerName=game.playerName;toast('PROFILE UPDATED');$('#panel-screen').classList.remove('visible');};}
-
-function sound(freq=180,duration=.06,type='square',vol=.025){if(!game.sound)return;try{const ctx=sound.ctx ||= new AudioContext();const o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.value=freq;g.gain.value=vol;g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+duration);o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+duration)}catch{}}
-function showKill(killer,victim,team){const row=document.createElement('div');row.className='kill-row';row.innerHTML=`<span class="killer">${escapeHtml(killer)}</span> &nbsp;▸&nbsp; <span class="victim">${escapeHtml(victim)}</span>`;$('#kill-feed').prepend(row);setTimeout(()=>row.remove(),4200);sound(270,.08,'triangle',.03);}
-function startRound(){game.round++;game.time=120;game.health=100;game.armor=Math.max(0,game.armor);game.ammo=game.weapon==='CV-47'?30:12;game.reserve=90;game.roundEnd=0;camera.position.set(game.team==='CT'?22:-22,1.72,0);spawnBots(game.botCount);updateHUD();toast(`ROUND ${game.round} — FIGHT!`);}
-function endRound(winner,reason){if(game.roundEnd)return;game.roundEnd=3;game[winner==='CT'?'ct':'t']++;$('#objective-banner').textContent=`${winner==='CT'?'COUNTER-TERRORISTS':'TERRORISTS'} WIN — ${reason}`;toast(`${winner} WIN THE ROUND`);game.money+=winner===game.team?3250:1400;updateHUD();}
-function fire(){if(!game.active||game.paused||game.buyOpen||game.ammo<=0||game.reload>0)return;if(performance.now()-game.lastShot<145)return;game.lastShot=performance.now();game.ammo--;gun.position.z=-.61;setTimeout(()=>gun.position.z=-.67,55);sound(100+Math.random()*35,.09,'sawtooth',.045);
- const spread=(game.keys.ShiftLeft||game.keys.ShiftRight)?.018:.006;const dir=new THREE.Vector3((Math.random()-.5)*spread,(Math.random()-.5)*spread,-1).applyQuaternion(camera.quaternion).normalize();const ray=new THREE.Raycaster(camera.position,dir,0,85);const targets=game.bots.filter(b=>b.alive&&b.team!==game.team);const hit=ray.intersectObjects([...targets.map(b=>b.group),...lastWorld],true)[0];if(hit){const target=targets.find(b=>b.group.getObjectById(hit.object.id));if(target){target.health-=game.weapon==='CV-47'?34:49;if(target.health<=0){target.alive=false;target.group.visible=false;game.kills++;game.money+=300;showKill(game.playerName,target.name,target.team);if(game.mode==='Free For All'||game.bots.every(x=>!x.alive||x.team===game.team))endRound(game.team,'ALL HOSTILES ELIMINATED');}}}
- updateHUD();}
-function reload(){if(game.reload||game.ammo=== (game.weapon==='CV-47'?30:12)||game.reserve<=0||!game.active)return;game.reload=1.45;sound(420,.05,'triangle');toast('RELOADING');setTimeout(()=>{const cap=game.weapon==='CV-47'?30:12,take=Math.min(cap-game.ammo,game.reserve);game.ammo+=take;game.reserve-=take;game.reload=0;updateHUD();sound(320,.05,'triangle')},1450);}
-function buyItem(item,cost,weapon){if(game.money<cost){toast('INSUFFICIENT FUNDS');return}game.money-=cost;if(weapon){game.weapon=weapon;game.ammo=weapon==='CV-47'?30:12;game.reserve=weapon==='CV-47'?90:48;}else if(item==='Armor'){game.armor=100;}else if(item==='Health'){game.health=Math.min(100,game.health+35)}else if(item==='Ammo'){game.reserve+=90;}updateHUD();sound(500,.045,'triangle');}
-function openBuy(){if(!game.active)return;const el=$('#buy-panel');el.innerHTML=`<h3>BUY EQUIPMENT <span style="float:right;font:12px monospace;color:#d8d694">$${game.money}</span></h3>${[['CV-47',2700,'CV-47'],['K-MP9',1250,'K-MP9'],['Sidearm',600,'Sidearm'],['Armor',1000,null],['Ammo',300,null],['Health',650,null]].map(([n,c,w])=>`<button class="buy-item" data-item="${n}" data-cost="${c}" data-weapon="${w||''}"><span>${n}</span><b>$${c}</b></button>`).join('')}<div class="buy-footer">PRESS B OR ESC TO CLOSE • BUY ZONE: SPAWN AREA</div>`;el.classList.remove('hidden');game.buyOpen=true;el.querySelectorAll('.buy-item').forEach(b=>b.onclick=()=>buyItem(b.dataset.item,+b.dataset.cost,b.dataset.weapon||null));}
-function closeBuy(){game.buyOpen=false;$('#buy-panel').classList.add('hidden');}
-function showScoreboard(){const friends=game.bots.filter(b=>b.team===game.team),foes=game.bots.filter(b=>b.team!==game.team);$('#scoreboard').innerHTML=`<h3>OLD QUARTER — ${game.ct} : ${game.t}</h3><table><tr><th>PLAYER</th><th>SCORE</th><th>DEATHS</th><th>TEAM</th></tr><tr><td>${escapeHtml(game.playerName)}</td><td>${game.kills}</td><td>${Math.max(0,2-Math.floor(game.health/45))}</td><td>${game.team}</td></tr>${[...friends,...foes].map(b=>`<tr><td>${escapeHtml(b.name)}</td><td>${Math.floor(Math.random()*7)}</td><td>${b.alive?0:1}</td><td>${b.team}</td></tr>`).join('')}</table>`;$('#scoreboard').classList.remove('hidden');}
-function updateRadar(){const wrap=$('#radar-dots');wrap.innerHTML='';const p=camera.position;const dot=(x,z,cls)=>{const d=document.createElement('i');d.className=`radar-dot ${cls}`;d.style.left=`${50+(x-p.x)*1.32}%`;d.style.top=`${50+(z-p.z)*1.32}%`;wrap.append(d)};dot(p.x,p.z,'me');for(const b of game.bots.filter(a=>a.alive)){const friendly=b.team===game.team;dot(b.group.position.x,b.group.position.z,friendly?'ally':'');}}
-
-function overlaps(x,z,r=.38){for(const o of game.obstacles){const minX=o.x-o.w/2-r,maxX=o.x+o.w/2+r,minZ=o.z-o.d/2-r,maxZ=o.z+o.d/2+r;if(x>minX&&x<maxX&&z>minZ&&z<maxZ)return true}return Math.abs(x)>34||Math.abs(z)>31}
-function lineOfSight(a,b){const dir=new THREE.Vector3().subVectors(b,a);const dist=dir.length();dir.normalize();const ray=new THREE.Raycaster(a,dir,0,dist);const meshes=[];for(const o of scene.children)if(o.isMesh&&o!==floorMesh)meshes.push(o);return ray.intersectObjects(meshes,false).length===0}
-const floorMesh=scene.children.find(o=>o.geometry?.type==='PlaneGeometry');
-function botAI(dt){for(const b of game.bots){const g=b.group;if(!b.alive){b.respawn-=dt;if(b.respawn<=0&&game.mode!=='Bomb Defusal'&&game.mode!=='Hostage Rescue'){b.alive=true;b.health=100;g.visible=true;g.position.set((Math.random()-.5)*44,0,(Math.random()-.5)*32)}continue;}
- b.shootCD-=dt;b.goal??=Math.floor(Math.random()*nav.length);const enemies=game.bots.filter(e=>e.alive&&e.team!==b.team);let target=null,best=15;
- for(const e of enemies){const d=g.position.distanceTo(e.group.position);if(d<best){best=d;target=e}}
- if(game.team!==b.team&&game.health>0){const d=g.position.distanceTo(camera.position);if(d<best){best=d;target={player:true,position:camera.position}}}
- let goal;if(target&&best<18){goal=target.position||target.group.position;b.state=best<10?'engage':'hunt';}else{goal=nav[b.goal];b.state='patrol';if(g.position.distanceTo(goal)<2)b.goal=(b.goal+1+Math.floor(Math.random()*2))%nav.length;}
- const toward=new THREE.Vector3(goal.x-g.position.x,0,goal.z-g.position.z);const dist=toward.length();if(dist>.45){toward.normalize();const speed=b.state==='engage'?.8:2.05;let nx=g.position.x+toward.x*speed*dt,nz=g.position.z+toward.z*speed*dt;if(overlaps(nx,nz,.42)){b.goal=(b.goal+2)%nav.length;nx=g.position.x-toward.z*speed*dt;nz=g.position.z+toward.x*speed*dt;}if(!overlaps(nx,nz,.42)){g.position.x=nx;g.position.z=nz}g.rotation.y=Math.atan2(toward.x,toward.z);g.userData.phase+=dt*7;g.userData.legs.forEach((l,i)=>l.rotation.x=Math.sin(g.userData.phase+i*Math.PI)*.45)}else g.userData.legs.forEach(l=>l.rotation.x=0);
- if(target&&best<20&&b.shootCD<=0){b.shootCD=game.difficulty==='Expert'?.65:game.difficulty==='Hard'?.95:1.35;if(target.player){const accuracy=game.difficulty==='Expert'?.45:game.difficulty==='Hard'?.27:game.difficulty==='Easy'?.1:.18;if(Math.random()<accuracy){game.health-=game.difficulty==='Expert'?15:10;game.armor=Math.max(0,game.armor-5);sound(75,.035,'square',.012);if(game.health<=0){game.health=0;game.roundEnd=2;toast('YOU WERE ELIMINATED — WAITING FOR ROUND END');}}}else if(Math.random()<.5){target.health-=18;if(target.health<=0){target.alive=false;target.group.visible=false;showKill(b.name,target.name,b.team)}}}
- }}
-function tick(dt){if(!game.active||game.paused)return;if(game.roundEnd>0){game.roundEnd-=dt;if(game.roundEnd<=0){$('#objective-banner').textContent='';if(game.health<=0){game.health=100;game.money+=1400}startRound()}return;}
- game.time-=dt;if(game.time<=0){game.time=0;endRound(game.mode==='Bomb Defusal'?'CT':'T','TIME EXPIRED')}
- const forward=new THREE.Vector3(-Math.sin(game.yaw),0,-Math.cos(game.yaw));const right=new THREE.Vector3(Math.cos(game.yaw),0,-Math.sin(game.yaw));const wish=new THREE.Vector3();if(game.keys.KeyW)wish.add(forward);if(game.keys.KeyS)wish.sub(forward);if(game.keys.KeyD)wish.add(right);if(game.keys.KeyA)wish.sub(right);if(wish.lengthSq()){wish.normalize();const crouch=game.keys.ControlLeft||game.keys.ControlRight;const speed=(game.keys.ShiftLeft||game.keys.ShiftRight)?2.4:crouch?2.0:5.0;game.velocity.x+=(wish.x*speed-game.velocity.x)*Math.min(1,dt*9);game.velocity.z+=(wish.z*speed-game.velocity.z)*Math.min(1,dt*9)}else{game.velocity.x*=Math.pow(.03,dt);game.velocity.z*=Math.pow(.03,dt)}
- let nx=camera.position.x+game.velocity.x*dt,nz=camera.position.z+game.velocity.z*dt;if(!overlaps(nx,camera.position.z,.4))camera.position.x=nx;if(!overlaps(camera.position.x,nz,.4))camera.position.z=nz;camera.position.y=game.keys.ControlLeft?1.12:1.72;
- botAI(dt);updateHUD();updateRadar();}
-const clock=new THREE.Clock();function animate(){requestAnimationFrame(animate);const dt=Math.min(.04,clock.getDelta());tick(dt);renderer.render(scene,camera)}animate();
-
-// Optional LAN lobby: the Node service advertises only live WebSocket-hosted sessions and relays player state.
-let lobbySocket=null, lobbyId=null, lastNetworkSend=0;const apiBase=location.port==='5173'?'http://'+location.hostname+':3001':'';
-function hostLobby(name,opts){connectLobby({type:'host',name,map:opts.map||game.map,mode:opts.mode||game.mode,maxPlayers:+opts.maxPlayers||game.maxPlayers,player:game.playerName});}
-function joinLobby(server){connectLobby({type:'join',id:server.id,player:game.playerName});startGame({map:server.map,mode:server.mode||'Bomb Defusal',bots:0});toast('CONNECTED TO '+server.name);}
-function connectLobby(payload){try{lobbySocket=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.hostname}:3001`);lobbySocket.onopen=()=>lobbySocket.send(JSON.stringify(payload));lobbySocket.onmessage=(event)=>{let data;try{data=JSON.parse(event.data)}catch{return}if(data.type==='welcome'){lobbyId=data.id;toast(data.message||'LOBBY CONNECTED')}if(data.type==='state'&&data.id!==lobbyId)syncRemote(data);if(data.type==='chat')toast(`${data.player}: ${data.text}`);if(data.type==='host-left')toast('HOST DISCONNECTED')};lobbySocket.onclose=()=>{if(game.active)toast('NETWORK SESSION ENDED — LOCAL MATCH CONTINUES')}}catch{toast('LOBBY SERVICE UNAVAILABLE — MATCH REMAINS LOCAL')}}
-function syncRemote(data){if(!data.player)return;let b=game.bots.find(x=>x.remoteId===data.id);if(!b){const g=makeSoldier(data.team||'CT',data.player);scene.add(g);b={group:g,team:data.team||'CT',name:data.player,health:100,alive:true,remoteId:data.id};game.bots.push(b)}b.group.position.set(data.x||0,0,data.z||0);b.group.rotation.y=data.yaw||0;}
-function broadcastState(){if(lobbySocket?.readyState===WebSocket.OPEN&&performance.now()-lastNetworkSend>70){lastNetworkSend=performance.now();lobbySocket.send(JSON.stringify({type:'state',player:game.playerName,team:game.team,x:camera.position.x,z:camera.position.z,yaw:game.yaw,health:game.health}));}}
-setInterval(()=>{if(game.active)broadcastState()},80);
-
-$('.main-menu').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const action=b.dataset.panel;if(action==='new'){showPanel('NEW GAME',`<p class="profile-note">Start a classic offline match against tactical bots. Choose your side and enter the Old Quarter.</p><div class="form-grid"><label class="field">GAME MODE<select id="quick-mode"><option>Bomb Defusal</option><option>Team Deathmatch</option><option>Free For All</option><option>Practice</option></select></label><label class="field">YOUR TEAM<select id="quick-team"><option value="CT">Counter-Terrorists</option><option value="T">Terrorists</option></select></label></div><div class="panel-actions"><button id="quick-start">DEPLOY</button></div>`);$('#quick-start').onclick=()=>{const mode=$('#quick-mode').value,team=$('#quick-team').value;$('#panel-screen').classList.remove('visible');startGame({mode,team,bots:8});};}else if(action==='create')openCreate();else if(action==='servers')openServers();else if(action==='options')openOptions();else if(action==='profile')openProfile();});
-$('#quit-button').onclick=()=>{toast('SESSION CLOSED — YOU MAY CLOSE THIS TAB');$('#menu-screen').classList.remove('visible');setTimeout(()=>$('#menu-screen').classList.add('visible'),900)};
-$('#resume-button').onclick=()=>togglePause(false);$('#leave-button').onclick=()=>{togglePause(false);game.active=false;document.exitPointerLock?.();$('#hud').classList.add('hidden');$('#menu-screen').classList.add('visible');};
-function togglePause(value=!game.paused){game.paused=value;$('#pause-panel').classList.toggle('hidden',!value);if(value)document.exitPointerLock?.();else if(game.active)canvas.requestPointerLock?.();}
-canvas.addEventListener('click',()=>{if(game.active&&!game.paused&&!game.buyOpen&&!$('#scoreboard').classList.contains('visible')&&!game.mouseLocked)canvas.requestPointerLock?.();});
-document.addEventListener('pointerlockchange',()=>game.mouseLocked=document.pointerLockElement===canvas);
-document.addEventListener('mousemove',e=>{if(!game.mouseLocked||!game.active)return;const s=+(localStorage.sensitivity||1);game.yaw-=e.movementX*.0022*s;game.pitch-=e.movementY*.0022*s;game.pitch=Math.max(-1.35,Math.min(1.35,game.pitch));camera.rotation.set(game.pitch,game.yaw,0,'YXZ')});
-document.addEventListener('keydown',e=>{if(['Space','Tab'].includes(e.code))e.preventDefault();game.keys[e.code]=true;if(e.repeat)return;if(e.code==='Escape'){if(game.buyOpen)closeBuy();else if(game.active)togglePause();}if(e.code==='KeyB'&&game.active)game.buyOpen?closeBuy():openBuy();if(e.code==='KeyR')reload();if(e.code==='Tab'&&game.active)showScoreboard();if(e.code==='Backquote'&&game.active){$('#console-panel').classList.toggle('hidden');if(!$('#console-panel').classList.contains('hidden'))$('#console-input').focus()}if(e.code==='Digit1'&&game.active){game.weapon='CV-47';game.ammo=Math.min(30,game.ammo);updateHUD()}if(e.code==='Digit2'&&game.active){game.weapon='Sidearm';game.ammo=12;updateHUD()}if(e.code==='Space'&&game.active&&camera.position.y<=1.73){camera.position.y=2.28;setTimeout(()=>{if(!game.keys.ControlLeft)camera.position.y=1.72},260)}});
-document.addEventListener('keyup',e=>{game.keys[e.code]=false;if(e.code==='Tab')$('#scoreboard').classList.add('hidden')});
-document.addEventListener('mousedown',e=>{if(e.button===0&&game.active&&game.mouseLocked)fire()});
-document.addEventListener('wheel',e=>{if(!game.active)return;game.weapon=game.weapon==='CV-47'?'Sidearm':'CV-47';game.ammo=game.weapon==='CV-47'?30:12;updateHUD()},{passive:true});
-$('#console-input').addEventListener('keydown',e=>{if(e.key!=='Enter')return;const text=e.target.value.trim();e.target.value='';$('#console-panel').classList.add('hidden');if(text==='help')toast('Commands: status, say <message>, map <name>, disconnect');else if(text.startsWith('say ')){if(lobbySocket?.readyState===WebSocket.OPEN)lobbySocket.send(JSON.stringify({type:'chat',text:text.slice(4),player:game.playerName}));toast(`${game.playerName}: ${text.slice(4)}`)}else if(text==='status')toast(`MAP ${game.map} • ${game.bots.length+1} PLAYERS • ${game.mode}`);else if(text.startsWith('map ')){game.map=text.slice(4);buildMap();toast('MAP RELOADED')}else if(text==='disconnect'){game.active=false;document.exitPointerLock?.();$('#hud').classList.add('hidden');$('#menu-screen').classList.add('visible')}else toast(`UNKNOWN COMMAND: ${text}`)});
-window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.65))});
-
-// Interactive battle ambience and subtle environment motion.
-setInterval(()=>{if(game.active&&!game.paused&&game.health>0){const enemies=game.bots.filter(b=>b.alive&&b.team!==game.team);const friendlies=game.bots.filter(b=>b.alive&&b.team===game.team);if(enemies.length===0&&game.bots.length)endRound(game.team,'OPPOSITION ELIMINATED');if(game.mode==='Bomb Defusal'&&game.time<15)$('#objective-banner').textContent='BOMB SITE — SECURE THE AREA';if(game.team==='CT'&&game.money<4000&&game.kills>0)game.money+=0;}} ,900);
-
